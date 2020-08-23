@@ -26,6 +26,11 @@ repositories {
 dependencies {
     // This dependency is used by the application.
     implementation 'org.xmlunit:xmlunit-core:2.7.0'
+    
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.11.2'
+    implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.11.2'
+    compile 'info.picocli:picocli:4.5.0'
+
 
     // Use JUnit test framework
     testImplementation 'junit:junit:4.13'

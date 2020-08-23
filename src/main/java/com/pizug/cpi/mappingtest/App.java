@@ -3,27 +3,79 @@
  */
 package com.pizug.cpi.mappingtest;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.pizug.cpi.mappingtest.config.Config;
 
 import org.xmlunit.builder.DiffBuilder;
 import org.xmlunit.builder.Input;
 import org.xmlunit.diff.Diff;
 
-public class App {
-    public String getGreeting() {
-        return "Hello world.";
-    }
+import picocli.CommandLine;
+import picocli.CommandLine.Command;
+import picocli.CommandLine.Option;
+
+@Command(description = "Test your SAP CPI Mapping flows with your local test data", name = "pizug-cpi-mapping-test", mixinStandardHelpOptions = true, version = "0.1")
+public class App implements Callable<Integer> {
+
+    @Option(names = { "-d",
+            "--directory" }, paramLabel = "DIRECTORY", description = "the directory containing test data and pizugtest.yaml configuration")
+    String directory;
 
     public static void main(String[] args) throws URISyntaxException, IOException, InterruptedException {
-        System.out.println(new App().getGreeting());
 
-        Diff d = DiffBuilder.compare(Input.fromFile("testdata/input.xml")).withTest(Input.fromFile("testdata/expected.xml"))
-                .ignoreWhitespace().ignoreComments().build();
+        int exitCode = new CommandLine(new App()).execute(args);
+        System.exit(exitCode);
+
+    }
+
+    @Override
+    public Integer call() throws Exception {
+        if (directory == null) {
+            directory = ".";
+        }
+        Path configFile = Paths.get(directory, "pizugtest.yaml");
+
+        if (!Files.exists(configFile)) {
+            System.out.println("No pizugtest.yaml config file found: " + configFile.normalize().toAbsolutePath());
+            return 1;
+        }
+
+        ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
+        Config config = mapper.readValue(configFile.toFile(), Config.class);
+
+        // ObjectMapper objectMapper = new ObjectMapper();
+        // objectMapper.writeValue(System.out, config);
+
+
+        List<Path> files;
+        try (Stream<Path> paths = Files.walk(Paths.get(directory))) {
+            files = paths.collect(Collectors.toList());
+            ;
+        }
+        System.out.println(files.toString());
+
+        for (Path p : files) {
+            System.out.println(p.toFile().isDirectory());
+        }
+
+        Diff d = DiffBuilder.compare(Input.fromFile("testdata/input.xml"))
+                .withTest(Input.fromFile("testdata/expected.xml")).ignoreWhitespace().ignoreComments().build();
 
         System.out.println(d.hasDifferences() + " - " + d.getDifferences().toString());
 
@@ -34,5 +86,7 @@ public class App {
         HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
 
         System.out.println(response.body());
+
+        return 0;
     }
 }
