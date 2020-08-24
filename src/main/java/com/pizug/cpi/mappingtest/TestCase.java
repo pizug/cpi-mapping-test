@@ -6,5 +6,8 @@ public class TestCase {
     public Path directory;
     public Path input;
     public Path expected;
-    public ExpectedType expectedType;
+    public ExpectedType expectedType = ExpectedType.UNSUPPORTED;
+
+    public Boolean isSuccessful;
+    public String diffText;
 }

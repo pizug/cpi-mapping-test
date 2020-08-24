@@ -1,14 +1,15 @@
 version: "1.0"
 connections:
   - name: dev
-    host: p0000-tmn.hci.eu1.hana.ondemand.com
+    host: p0000-iflmap.hcisbp.eu1.hana.ondemand.com
     path: "/http/pizug_test_router"
     username: P123123
     password_environment_variable: "CPI_PASSWORD"
 
 mapping:
-  processdirect_path: "/processdirect"
+  processdirect_path: "/example/mapping/calculator"
 
+#not part of the tool yet...
 expected:
   xml:
     ignore:

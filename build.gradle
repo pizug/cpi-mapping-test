@@ -29,7 +29,7 @@ dependencies {
     
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.11.2'
     implementation 'com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.11.2'
-    compile 'info.picocli:picocli:4.5.0'
+    implementation 'info.picocli:picocli:4.5.0'
 
 
     // Use JUnit test framework

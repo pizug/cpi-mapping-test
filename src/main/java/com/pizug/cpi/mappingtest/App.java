@@ -3,7 +3,6 @@
  */
 package com.pizug.cpi.mappingtest;
 
-import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -13,10 +12,8 @@ import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.List;
+import java.util.Base64;
 import java.util.concurrent.Callable;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
@@ -35,7 +32,7 @@ public class App implements Callable<Integer> {
 
     @Option(names = { "-d",
             "--directory" }, paramLabel = "DIRECTORY", description = "the directory containing test data and pizugtest.yaml configuration")
-    String directory;
+    String directoryString;
 
     public static void main(String[] args) throws URISyntaxException, IOException, InterruptedException {
 
@@ -46,10 +43,12 @@ public class App implements Callable<Integer> {
 
     @Override
     public Integer call() throws Exception {
-        if (directory == null) {
-            directory = ".";
+        if (directoryString == null) {
+            directoryString = ".";
         }
-        Path configFile = Paths.get(directory, "pizugtest.yaml");
+
+        Path directoryPath = Paths.get(directoryString);
+        Path configFile = Paths.get(directoryString, "pizugtest.yaml");
 
         if (!Files.exists(configFile)) {
             System.out.println("No pizugtest.yaml config file found: " + configFile.normalize().toAbsolutePath());
@@ -62,31 +61,107 @@ public class App implements Callable<Integer> {
         // ObjectMapper objectMapper = new ObjectMapper();
         // objectMapper.writeValue(System.out, config);
 
+        TestConfiguration rootTestConfiguration = new TestConfiguration();
 
-        List<Path> files;
-        try (Stream<Path> paths = Files.walk(Paths.get(directory))) {
-            files = paths.collect(Collectors.toList());
-            ;
+        rootTestConfiguration.effectiveConfig = config;
+        rootTestConfiguration.directory = directoryPath;
+
+        if (config.connections.size() < 1) {
+            System.out.println("There should be at least one connection");
+            return 1;
         }
-        System.out.println(files.toString());
+        rootTestConfiguration.effectiveConnection = config.connections.get(0);
 
-        for (Path p : files) {
-            System.out.println(p.toFile().isDirectory());
+        String passValue = System.getenv(config.connections.get(0).password_environment_variable);
+        if (passValue == null) {
+            System.out.println("Password is not present in environment variables");
+            return 1;
         }
+        rootTestConfiguration.password = passValue;
 
-        Diff d = DiffBuilder.compare(Input.fromFile("testdata/input.xml"))
-                .withTest(Input.fromFile("testdata/expected.xml")).ignoreWhitespace().ignoreComments().build();
+        Boolean failureFound = false;
+        searchForCases(rootTestConfiguration, directoryPath);
+        for (TestCase tc : rootTestConfiguration.testCases) {
 
-        System.out.println(d.hasDifferences() + " - " + d.getDifferences().toString());
+            try {
+                System.out.println("Testing: " + rootTestConfiguration.directory.relativize(tc.directory));
+                executeTest(rootTestConfiguration, tc);
+                if (!tc.isSuccessful) {
+                    failureFound = true;
+                    // print error
+                    System.out.println(
+                            "\u001B[91m" + rootTestConfiguration.directory.relativize(tc.directory) + " failed.");
+                    System.out.println("\u001B[91m" + tc.diffText);
+                } else {
+                    System.out.println(
+                            "\u001B[32m" + rootTestConfiguration.directory.relativize(tc.directory) + " successful.");
+                }
+                System.out.print("\u001B[0m");
+            } catch (Exception e) {
+                e.printStackTrace();
+                failureFound = true;
+            }
 
-        HttpRequest request = HttpRequest.newBuilder().uri(new URI("https://postman-echo.com/post"))
-                .headers("Content-Type", "text/plain;charset=UTF-8")
-                .POST(HttpRequest.BodyPublishers.ofString("HELLO from service")).build();
-
-        HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
-
-        System.out.println(response.body());
+        }
+        if (failureFound) {
+            return 1;
+        }
 
         return 0;
+    }
+
+    private void executeTest(TestConfiguration testConfig, TestCase testCase)
+            throws IOException, InterruptedException, URISyntaxException {
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(new URI("https://" + testConfig.effectiveConnection.host + testConfig.effectiveConnection.path))
+                .header("Authorization", basicAuth(testConfig.effectiveConnection.username, testConfig.password))
+                .headers("Content-Type", "text/plain;charset=UTF-8")
+                .headers("processdirect_path", testConfig.effectiveConfig.mapping.processdirect_path)
+                .POST(HttpRequest.BodyPublishers.ofFile(testCase.input)).build();
+
+        HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
+System.out.println(response.body());
+        Diff d = DiffBuilder.compare(Input.fromFile(testCase.expected.toFile()))
+                .withTest(Input.fromString(response.body())).ignoreWhitespace().ignoreComments().build();
+
+        testCase.isSuccessful = !d.hasDifferences();
+        testCase.diffText = d.getDifferences().toString();
+    }
+
+    private static String basicAuth(String username, String password) {
+        return "Basic " + Base64.getEncoder().encodeToString((username + ":" + password).getBytes());
+    }
+
+    private void searchForCases(TestConfiguration testConfiguration, Path currentDirPath) throws IOException {
+        TestCase testCase = new TestCase();
+        testCase.directory = currentDirPath;
+
+        Files.list(currentDirPath).forEach(path -> {
+            if (Files.isDirectory(path)) {
+                try {
+                    searchForCases(testConfiguration, path);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            }
+
+            if (Files.isRegularFile(path)) {
+                if (path.getFileName().toString().startsWith("input")) {
+                    testCase.input = path;
+                }
+                if (path.getFileName().toString().startsWith("expected")) {
+                    testCase.expected = path;
+                    if (path.getFileName().toString().endsWith(".xml")) {
+                        testCase.expectedType = ExpectedType.XML;
+                    }
+                }
+            }
+
+        });
+
+        if (testCase.input != null && testCase.expected != null && testCase.expectedType != ExpectedType.UNSUPPORTED) {
+            testConfiguration.testCases.add(testCase);
+        }
     }
 }
