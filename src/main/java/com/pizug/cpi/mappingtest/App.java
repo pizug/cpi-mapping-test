@@ -79,7 +79,8 @@ public class App implements Callable<Integer> {
         }
         rootTestConfiguration.password = passValue;
 
-        Boolean failureFound = false;
+        Integer successCount = 0;
+        Integer failCount = 0;
         searchForCases(rootTestConfiguration, directoryPath);
         for (TestCase tc : rootTestConfiguration.testCases) {
 
@@ -87,23 +88,33 @@ public class App implements Callable<Integer> {
                 System.out.println("Testing: " + rootTestConfiguration.directory.relativize(tc.directory));
                 executeTest(rootTestConfiguration, tc);
                 if (!tc.isSuccessful) {
-                    failureFound = true;
+                    failCount++;
                     // print error
                     System.out.println(
                             "\u001B[91m" + rootTestConfiguration.directory.relativize(tc.directory) + " failed.");
                     System.out.println("\u001B[91m" + tc.diffText);
                 } else {
+                    successCount++;
                     System.out.println(
                             "\u001B[32m" + rootTestConfiguration.directory.relativize(tc.directory) + " successful.");
                 }
-                System.out.print("\u001B[0m");
-            } catch (Exception e) {
-                e.printStackTrace();
-                failureFound = true;
-            }
 
+            } catch (Exception e) {
+                tc.isSuccessful = false;
+                tc.diffText = e.toString();
+                failCount++;
+
+                // print error
+                System.out
+                        .println("\u001B[91m" + rootTestConfiguration.directory.relativize(tc.directory) + " failed.");
+                System.out.println("\u001B[91m" + tc.diffText);
+            }
+            System.out.print("\u001B[0m");
         }
-        if (failureFound) {
+        System.out.println("\n Total:" + Integer.toString(successCount + failCount) + "\u001B[32m Successful:"
+                + successCount.toString() + " \u001B[91m Fail:" + failCount.toString() + " \u001B[0m \n");
+
+        if (failCount > 0) {
             return 1;
         }
 
@@ -121,7 +132,7 @@ public class App implements Callable<Integer> {
                 .POST(HttpRequest.BodyPublishers.ofFile(testCase.input)).build();
 
         HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
-System.out.println(response.body());
+
         Diff d = DiffBuilder.compare(Input.fromFile(testCase.expected.toFile()))
                 .withTest(Input.fromString(response.body())).ignoreWhitespace().ignoreComments().build();
 
