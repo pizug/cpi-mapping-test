@@ -32,7 +32,7 @@ import picocli.CommandLine.Option;
 public class App implements Callable<Integer> {
 
     @Option(names = { "-d",
-            "--directory" }, paramLabel = "DIRECTORY", description = "the directory containing test data and pizugtest.yaml configuration")
+            "--directory" }, paramLabel = "DIRECTORY", description = "the directory containing test data and pizug-test.yaml configuration")
     String directoryString;
 
     @Option(names = { "-p", "--password" }, description = "Default password for CPI user", interactive = true)
@@ -53,10 +53,10 @@ public class App implements Callable<Integer> {
         }
 
         Path directoryPath = Paths.get(directoryString);
-        Path configFile = Paths.get(directoryString, "pizugtest.yaml");
+        Path configFile = Paths.get(directoryString, "pizug-test.yaml");
 
         if (!Files.exists(configFile)) {
-            System.out.println("No pizugtest.yaml config file found: " + configFile.normalize().toAbsolutePath());
+            System.out.println("No pizug-test.yaml config file found: " + configFile.normalize().toAbsolutePath());
             return 1;
         }
 
