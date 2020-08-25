@@ -7,7 +7,7 @@ connections:
     password_environment_variable: "CPI_PASSWORD"
 
 mapping:
-  processdirect_path: "/example/mapping/calculator"
+  processdirect_path: "/example/mapping/calculator/add"
 
 #not part of the tool yet...
 expected:

@@ -19,6 +19,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.pizug.cpi.mappingtest.config.Config;
 
+import org.fusesource.jansi.AnsiConsole;
 import org.xmlunit.builder.DiffBuilder;
 import org.xmlunit.builder.Input;
 import org.xmlunit.diff.Diff;
@@ -27,14 +28,18 @@ import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
-@Command(description = "Test your SAP CPI Mapping flows with your local test data", name = "pizug-cpi-mapping-test", mixinStandardHelpOptions = true, version = "0.1")
+@Command(description = "Test your SAP CPI Mapping flows with your local test data", name = "pizug-cpi-mapping-test", mixinStandardHelpOptions = true, version = "0.1.0")
 public class App implements Callable<Integer> {
 
     @Option(names = { "-d",
             "--directory" }, paramLabel = "DIRECTORY", description = "the directory containing test data and pizugtest.yaml configuration")
     String directoryString;
 
+    @Option(names = { "-p", "--password" }, description = "Default password for CPI user", interactive = true)
+    String defaultPassword;
+
     public static void main(String[] args) throws URISyntaxException, IOException, InterruptedException {
+        AnsiConsole.systemInstall();
 
         int exitCode = new CommandLine(new App()).execute(args);
         System.exit(exitCode);
@@ -72,12 +77,17 @@ public class App implements Callable<Integer> {
         }
         rootTestConfiguration.effectiveConnection = config.connections.get(0);
 
-        String passValue = System.getenv(config.connections.get(0).password_environment_variable);
-        if (passValue == null) {
-            System.out.println("Password is not present in environment variables");
+        String passValue = System.getenv(rootTestConfiguration.effectiveConnection.password_environment_variable);
+        if (passValue == null && defaultPassword == null) {
+            System.out.println("Password is not present in environment variables & there is no default password");
             return 1;
         }
-        rootTestConfiguration.password = passValue;
+        if (defaultPassword != null) {
+            rootTestConfiguration.password = defaultPassword;
+        }
+        if (passValue != null) {
+            rootTestConfiguration.password = passValue;
+        }
 
         Integer successCount = 0;
         Integer failCount = 0;
@@ -108,6 +118,7 @@ public class App implements Callable<Integer> {
                 System.out
                         .println("\u001B[91m" + rootTestConfiguration.directory.relativize(tc.directory) + " failed.");
                 System.out.println("\u001B[91m" + tc.diffText);
+                e.printStackTrace();
             }
             System.out.print("\u001B[0m");
         }
@@ -132,7 +143,16 @@ public class App implements Callable<Integer> {
                 .POST(HttpRequest.BodyPublishers.ofFile(testCase.input)).build();
 
         HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
-
+        if (response.statusCode() == 401) {
+            System.out.println(
+                    "\u001B[91m There is an authentication error. Stopping the test run since your user may get locked for 1 hour after 5 failed attempts. \u001B[0m ");
+            System.exit(1);
+        }
+        if (response.statusCode() != 200) {
+            testCase.isSuccessful = false;
+            testCase.diffText = "HTTP status code is not 200. Status code:" + Integer.toString(response.statusCode());
+            return;
+        }
         Diff d = DiffBuilder.compare(Input.fromFile(testCase.expected.toFile()))
                 .withTest(Input.fromString(response.body())).ignoreWhitespace().ignoreComments().build();
 
