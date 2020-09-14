@@ -3,16 +3,20 @@
  */
 package com.pizug.cpi.mappingtest;
 
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpRequest.Builder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Base64;
+import java.util.Properties;
 import java.util.concurrent.Callable;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -135,12 +139,26 @@ public class App implements Callable<Integer> {
     private void executeTest(TestConfiguration testConfig, TestCase testCase)
             throws IOException, InterruptedException, URISyntaxException {
 
-        HttpRequest request = HttpRequest.newBuilder()
+        Builder requestBuilder = HttpRequest.newBuilder()
                 .uri(new URI("https://" + testConfig.effectiveConnection.host + testConfig.effectiveConnection.path))
                 .header("Authorization", basicAuth(testConfig.effectiveConnection.username, testConfig.password))
-                .headers("Content-Type", "text/plain;charset=UTF-8")
-                .headers("processdirect_path", testConfig.effectiveConfig.mapping.processdirect_path)
-                .POST(HttpRequest.BodyPublishers.ofFile(testCase.input)).build();
+                .header("Content-Type", "text/plain;charset=UTF-8")
+                .header("processdirect_path", testConfig.effectiveConfig.mapping.processdirect_path)
+                .POST(HttpRequest.BodyPublishers.ofFile(testCase.inputBody));
+
+        if (testCase.inputHeader != null) {
+            Properties inputHeaderProps = new Properties();
+            try (FileInputStream in = new FileInputStream(testCase.inputHeader.toFile())) {
+                inputHeaderProps.load(in);
+            }
+
+            for (String key : inputHeaderProps.stringPropertyNames()) {
+                String value = inputHeaderProps.getProperty(key);
+                requestBuilder.header(key, value);
+            }
+        }
+
+        HttpRequest request = requestBuilder.build();
 
         HttpResponse<String> response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() == 401) {
@@ -153,6 +171,11 @@ public class App implements Callable<Integer> {
             testCase.diffText = "HTTP status code is not 200. Status code:" + Integer.toString(response.statusCode());
             return;
         }
+        // write response to file
+        // use the same file extension with expected:
+        Path resultPath = Paths.get(testCase.directory.toString(), "result.body" + testCase.expectedExtension);
+        Files.write(resultPath, response.body().getBytes(StandardCharsets.UTF_8));
+
         Diff d = DiffBuilder.compare(Input.fromFile(testCase.expected.toFile()))
                 .withTest(Input.fromString(response.body())).ignoreWhitespace().ignoreComments().build();
 
@@ -178,20 +201,30 @@ public class App implements Callable<Integer> {
             }
 
             if (Files.isRegularFile(path)) {
-                if (path.getFileName().toString().startsWith("input")) {
-                    testCase.input = path;
+                if (path.getFileName().toString().startsWith("input.body")) {
+                    testCase.inputBody = path;
+                }
+                if (path.getFileName().toString().startsWith("input.header")) {
+                    testCase.inputHeader = path;
                 }
                 if (path.getFileName().toString().startsWith("expected")) {
                     testCase.expected = path;
                     if (path.getFileName().toString().endsWith(".xml")) {
                         testCase.expectedType = ExpectedType.XML;
                     }
+
+                    // file extension get it with the dot "."
+                    int i = path.getFileName().toString().lastIndexOf('.');
+                    if (i > 0) {
+                        testCase.expectedExtension = path.getFileName().toString().substring(i);
+                    }
                 }
             }
 
         });
 
-        if (testCase.input != null && testCase.expected != null && testCase.expectedType != ExpectedType.UNSUPPORTED) {
+        if (testCase.inputBody != null && testCase.expected != null
+                && testCase.expectedType != ExpectedType.UNSUPPORTED) {
             testConfiguration.testCases.add(testCase);
         }
     }

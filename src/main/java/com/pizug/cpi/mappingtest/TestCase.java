@@ -4,8 +4,10 @@ import java.nio.file.Path;
 
 public class TestCase {
     public Path directory;
-    public Path input;
+    public Path inputBody;
+    public Path inputHeader;
     public Path expected;
+    public String expectedExtension = "txt";
     public ExpectedType expectedType = ExpectedType.UNSUPPORTED;
 
     public Boolean isSuccessful;
