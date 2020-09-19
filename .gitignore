@@ -4,7 +4,10 @@
 # Ignore Gradle build output directory
 build
 
-
+.vscode
+.project
+.classpath
+.settings
 
 # Created by https://www.toptal.com/developers/gitignore/api/java,gradle,eclipse,visualstudiocode
 # Edit at https://www.toptal.com/developers/gitignore?templates=java,gradle,eclipse,visualstudiocode
