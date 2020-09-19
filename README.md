@@ -15,7 +15,7 @@ It is best for complex mapping development. It can also be used for regression t
 You can find the example test suite in `example-test-data` folder.
 
 ## Changelog
-See CHANGELOG.md
+See [CHANGELOG.md](CHANGELOG.md)
 
 ## Blog Posts
 
