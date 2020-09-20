@@ -32,7 +32,7 @@ import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
-@Command(description = "Test your SAP CPI Mapping flows with your local test data", name = "pizug-cpi-mapping-test", mixinStandardHelpOptions = true, version = "0.1.0")
+@Command(description = "Test your SAP CPI Mapping flows with your local test data", name = "pizug-cpi-mapping-test", mixinStandardHelpOptions = true, version = "0.2.0")
 public class App implements Callable<Integer> {
 
     @Option(names = { "-d",
@@ -146,7 +146,7 @@ public class App implements Callable<Integer> {
                 .header("processdirect_path", testConfig.effectiveConfig.mapping.processdirect_path)
                 .POST(HttpRequest.BodyPublishers.ofFile(testCase.inputBody));
 
-        if (testCase.inputHeader != null) {
+        if (testCase.inputHeader != null && testCase.inputHeader.toFile().exists()) {
             Properties inputHeaderProps = new Properties();
             try (FileInputStream in = new FileInputStream(testCase.inputHeader.toFile())) {
                 inputHeaderProps.load(in);
